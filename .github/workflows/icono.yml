@@ -5,54 +5,53 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   cambiar-icono:
     runs-on: windows-latest
 
     steps:
-      - name: Descargar archivos del repositorio
+      - name: Descargar archivos
         uses: actions/checkout@v4
 
-      - name: Cambiar icono del ejecutable
+      - name: Cambiar icono del EXE
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
+
           $exe = Join-Path $PWD "agenda.exe"
           $ico = Join-Path $PWD "transfer.ico"
-
-          if (!(Test-Path $exe)) { throw "No se encuentra agenda.exe" }
-          if (!(Test-Path $ico)) { throw "No se encuentra transfer.ico" }
-
-          $tool = Join-Path $env:RUNNER_TEMP "ResourceHacker.exe"
-          $url = "https://www.angusj.com/resourcehacker/resource_hacker.zip"
-          $zip = Join-Path $env:RUNNER_TEMP "resource_hacker.zip"
-
-          Invoke-WebRequest -Uri $url -OutFile $zip
-          Expand-Archive -Path $zip -DestinationPath (Join-Path $env:RUNNER_TEMP "rh") -Force
-
-          $rh = Get-ChildItem (Join-Path $env:RUNNER_TEMP "rh") -Recurse -Filter "ResourceHacker.exe" |
-            Select-Object -First 1
-
-          if (!$rh) { throw "No se encontró Resource Hacker en el paquete descargado" }
-
           $output = Join-Path $PWD "agenda_modificado.exe"
-          $script = Join-Path $env:RUNNER_TEMP "replace.rc"
 
-          @"
-          -open "$exe"
-          -save "$output"
-          -action addoverwrite
-          -res "$ico"
-          -mask ICONGROUP,MAINICON,
-          "@ | Set-Content -Path $script -Encoding ASCII
+          if (!(Test-Path $exe)) {
+            throw "No se encuentra agenda.exe"
+          }
 
-          & $rh.FullName -script $script
+          if (!(Test-Path $ico)) {
+            throw "No se encuentra transfer.ico"
+          }
 
-          if (!(Test-Path $output)) { throw "No se generó el ejecutable modificado" }
+          Copy-Item $exe $output
 
-      - name: Guardar ejecutable modificado como artefacto
+          $tool = Join-Path $env:RUNNER_TEMP "rcedit.exe"
+          $url = "https://github.com/electron/rcedit/releases/latest/download/rcedit-x64.exe"
+
+          Invoke-WebRequest -Uri $url -OutFile $tool
+
+          & $tool $output --set-icon $ico
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "rcedit no pudo modificar el icono. Código: $LASTEXITCODE"
+          }
+
+          if (!(Test-Path $output)) {
+            throw "No se generó el ejecutable modificado"
+          }
+
+          Write-Host "Icono actualizado correctamente"
+
+      - name: Publicar ejecutable
         uses: actions/upload-artifact@v4
         with:
           name: agenda-con-nuevo-icono
